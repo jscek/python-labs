@@ -1,6 +1,6 @@
 from string import ascii_lowercase
 
-vars = list(ascii_lowercase)
+all_vars = ascii_lowercase
 ops = {'~' : 4, '^' : 3, '&' : 2, '|' : 2, '/' : 2, '>' : 1}
 
 def var(expr):
@@ -45,19 +45,21 @@ def check(expr):
 # @expr - wyrazenie
 # @ops  - dostepne operatory
 def bal(expr, ops):
-  pcounter = 0
+  parens = 0
 
   for i in range(len(expr) - 1, -1, -1):
     if expr[i] == '(':
-      pcounter += 1
+      parens += 1
     elif expr[i] == ')':
-      pcounter -= 1
-    elif expr[i] in ops and pcounter == 0:
+      parens -= 1
+    elif expr[i] in ops and parens == 0:
       return i
   
   return -1
 
 
+
+# TODO: poprawic kodzik zeby nie bylo redundancji
 def onp(expr):
   expr = wstrim(expr)
 
@@ -65,12 +67,22 @@ def onp(expr):
   while expr[0] == '(' and expr[len(expr) - 1] == ')' and check(expr[1:-1]):
     expr = expr[1:-1]
   
-  p = bal(expr, ">")
+  p = bal(expr, '>')
   
   if p >= 0:
     return onp(expr[:p]) + onp(expr[p + 1:]) + expr[p]
   
-  p = bal(expr, "&|")
+  p = bal(expr, '&|/')
+
+  if p >= 0:
+    return onp(expr[:p]) + onp(expr[p + 1:]) + expr[p]
+
+  p = bal(expr, '^')
+
+  if p >= 0:
+    return onp(expr[:p]) + onp(expr[p + 1:]) + expr[p]
+
+  p = bal(expr, '~')
 
   if p >= 0:
     return onp(expr[:p]) + onp(expr[p + 1:]) + expr[p]
@@ -78,15 +90,21 @@ def onp(expr):
   return expr
 
 
-def onp_map(expr, vars, values):
-  l = expr
+
+
+def onp_map(expr, expr_vars, values):
+  l = list(expr)
   for i, c in enumerate(l):
-    p = vars.find(c)
+    p = expr_vars.find(c)
     if p >= 0:
-      l[i] = values[i]
+      l[i] = values[p]
 
   return ''.join(l)
   
+
+
+
+
 def OR(a, b):
   return a or b
 
@@ -94,8 +112,8 @@ def AND(a, b):
   return a and b
 
 
-def value(onp_expr, values, vars):
-  onp_expr = onp_map(onp_expr, vars, values)
+def value(onp_expr, values, expr_vars):
+  onp_expr = onp_map(onp_expr, expr_vars, values)
   stack = []
 
   for c in onp_expr:
@@ -120,15 +138,11 @@ def main():
   while True:
     expr = input('> ')
 
-    print(check(expr))
-
-    #print(expr)
-    #expr = onp(expr)
-    #print(expr)
-    #vars = var(expr)
-    #print(vars)
-    #for v in gen(len(vars)):
-    #  print(v, value(expr, v, vars))
+    expr = onp(expr)
+    print(expr)
+    expr_vars = var(expr)
+    for v in gen(len(expr_vars)):
+      print(v, value(expr, v, expr_vars))
 
 
 if __name__ == "__main__":
