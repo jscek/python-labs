@@ -54,9 +54,14 @@ def show(s):
 
 
 with open('vector', 'r') as f:
-  v = set(f.read().split('\n'))
+  # zmienic na set
+  v = list(f.read().split('\n'))
+
+print(v)
 
 r = reduc(v)
+
+print(merge('1000', '0000'))
 
 print(show(v))
 print(show(r))
