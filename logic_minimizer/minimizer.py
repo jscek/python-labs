@@ -1,22 +1,19 @@
-import re
 from string import ascii_lowercase
-from itertools import product, combinations
-
 
 all_vars = ascii_lowercase
 ops = '>&|/^~'
 consts = 'TF'
 
-
+# dla zadanego wyrażenia  zwraca string zawierający wszystkie zmienne występujące w wyrażeniu
 def vars_list(expr):
   return ''.join(sorted(set([c for c in expr if c in all_vars])))
 
-
+#  'zjada' białe znaki występujące w wyrażeniu
 def eat_whitespaces(expr):
   expr = ''.join(expr.split())
   return expr
 
-
+#  sprawdza poprawność wyrażenia
 def correct(expr):
   state = True
   parens = 0
@@ -49,15 +46,15 @@ def correct(expr):
 
   return not state
 
-
-def cut_parens(expr):
+#  'zjada' zewnętrzne, niepotrzebne nawiasy
+def eat_parens(expr):
   while (len(expr) > 2 and expr[0] == '(') and (expr[-1] == ')') and correct(expr[1:-1]):
     expr = expr[1:-1]
 
   return expr
 
-# OK
-def balanced(expr, divider):
+#  'dzieli' wyrażenie, zwraca indeks, pod którym występuje operator dzielący (divider) lub -1 w przypadku braku możliwości podzielenia
+def partition(expr, divider):
   parens = 0
 
   for i in range(len(expr)):
@@ -67,18 +64,17 @@ def balanced(expr, divider):
   
   return -1
 
-
+#  zamienia wyrażenie na to samo wyrażenie zapisane w odwrotnej notacji polskiej
 def rpn(expr):
-  expr = cut_parens(expr)  
+  expr = eat_parens(expr)  
   
   for o in ops:
-    p = balanced(expr, o)
+    p = partition(expr, o)
     if p >= 0: return rpn(expr[:p]) + rpn(expr[p + 1:]) + expr[p]
 
   return expr
 
-
-# OK
+# zwraca string reprezentujący wartości zmiennych
 def rpn_map(expr, values):
   symbols = list(expr)
   for i, s in enumerate(symbols):
@@ -93,7 +89,7 @@ def rpn_map(expr, values):
 
   return ''.join(symbols)
   
-
+# zwraca logiczną wartość wyrażenia
 def value(rpn_expr, values):
   rpn_expr = rpn_map(rpn_expr, values)
   stack = []
@@ -118,29 +114,12 @@ def value(rpn_expr, values):
 
   return stack.pop()
 
-
+# generator liczb binarnych o długości n
 def generate_bin(n):
   for i in range(2**n):
     yield bin(i)[2:].rjust(n, '0')
 
-def count_ones(bin_num):
-  ones = 0
-  for b in bin_num:
-    if b == '1':
-      ones += 1
-  
-  return ones
-
-
-def group_by_ones(vector, vars_num):
-  grouped = [[] for i in range(vars_num + 1)]
-
-  for v in vector:
-    grouped[count_ones(v)].append(v)
-
-  return grouped
-
-
+# dla dwóch wartości binarnych, jeśli różnią się cyfrą tylko na jednej pozycji, zwraca 
 def merge(s1, s2):
   result = ''
   counter = 0
@@ -157,8 +136,8 @@ def merge(s1, s2):
   else:
     return False
 
-
-def reduce(vector):
+# 
+def reduced(vector):
   result = set()
   b2 = False
   for e1 in vector:
@@ -173,12 +152,44 @@ def reduce(vector):
       result.add(e1)
 
   if b2:
-    return reduce(result)
+    return reduced(result)
 
   return result
 
+# z wyrażenia o postaci: `op` P (dla negacji) lub L `op` P (dla pozostałych operatorów) tworzy listę (drzewo) o postaci [`op`, L] lub [`op`, L, P]
+def make_tree(expr):
+  expr = eat_parens(expr)
+  tree = []
+  
+  if len(expr) == 1: return expr
 
-def show(s, vars):
+  for o in ops:
+    p = partition(expr, o)
+      
+    if p >= 0: 
+      if o == '~':
+        tree.append(expr[p])
+        tree.append(make_tree(expr[(p + 1):]))
+      else:
+        tree.append(expr[p])
+        tree.append(make_tree(expr[:p]))
+        tree.append(make_tree(expr[(p + 1):]))
+
+      return tree
+
+# zwraca drzewo wyrażeń jako string
+def show(expr_values):
+  # przypadek gdy element to zmienna
+  if (len(expr_values) == 1): return expr_values
+
+  # przypadek gdy element to zanegowana zmienna
+  if (len(expr_values) == 2): return expr_values[0] + show(expr_values[1])
+
+  # sklejanie stron operatorem
+  return show(expr_values[1]) + expr_values[0] + show(expr_values[2])
+
+
+def show_normalized(s, vars):
   m_res = ''
   for w in s:
     res = ''
@@ -193,36 +204,91 @@ def show(s, vars):
   return m_res[:-1]
 
 
+def check_simplifies(tree):
+  if len(tree) == 1: return tree
+
+  if tree[0] == '|':
+      # xor
+      if len(tree[1]) == 3 and len(tree[2]) == 3:
+        if tree[1][0] == '&' and tree[2][0] == '&':
+          if len(tree[1][1]) == 2 and len(tree[2][2]) == 2:
+            tree[0] = '^'
+            p = tree[2][1]
+            q = tree[1][2]
+            tree[1] = p
+            tree[2] = q
+          elif len(tree[1][2]) == 2 and len(tree[2][1]) == 2:
+            tree[0] = '^'
+            p = tree[1][1]
+            q = tree[2][2]
+            tree[1] = p
+            tree[2] = q
+
+      # implikacja
+      if (len(tree[1]) == 1 and len(tree[2]) == 2):
+          tree[0] = '>'
+          right = tree[1]
+          tree[1] = tree[2][1]
+          tree[2] = right
+      if (len(tree[1]) == 2 and len(tree[2]) == 1):
+          tree[0] = '>'
+          tree[1] = tree[1][1]
+          
+
+  if (len(tree) == 3):
+    if (len(tree[1]) == 3):
+      tree[1] = check_simplifies(tree[1])
+
+    if (len(tree[2]) == 3):
+      tree[2] = check_simplifies(tree[2])
+
+  return tree
+
+
 def main():
   while True:
-    l = []
+    # lista, w której przechowywane będą wartośći zmiennych, dla których wyrażenie zwraca 1
+    expr_values = []
     expr = input('> ')
 
     if not correct(expr):
       print('ERROR')
       continue
 
-
     expr = eat_whitespaces(expr)
+    expr = eat_parens(expr)
+
+    original_expr = expr
+    # ilość znakow wyrazenia wejściowego (ilość zmiennych i operatorów)
+    original_len = len(show(make_tree(expr)))
+
     expr = rpn(expr)
-
     expr_vars = vars_list(expr)
-    
-    for v in generate_bin(len(expr_vars)):      
-      if value(expr, v) == 1:
-        l.append(v)
+
+    for b in generate_bin(len(expr_vars)):      
+      if value(expr, b) == 1:
+        expr_values.append(b)
         
-
-    # jesli zaden wektor wartosci nie zwraca prawdy
-    if (len(l) == 0):
-      final = 'F'
-    #jesli wszystkie zwracaja prawde
-    elif (len(l) == 2**len(l[0])):
-      final = 'T'
+    # jeśli żaden wektor wartości nie zwraca prawdy
+    if (len(expr_values) == 0):
+      print('F')
+      continue
+    #jeśli wszystkie zwracają prawdę
+    elif (len(expr_values) == 2**len(expr_values[0])):
+      print('T')
+      continue
     else:
-      final = show(reduce(l), expr_vars)
+      result = show_normalized(reduced(expr_values), expr_vars)
 
-    print(final)
+    tree = make_tree(result)
+    tree = check_simplifies(tree)
+
+    result_len = len(show(tree))
+
+    if result_len < original_len:
+      print('{0}, compression: {1:.2f}%'.format(show(tree), result_len / original_len))
+    else:
+      print(original_expr)
 
 
 if __name__ == '__main__':
