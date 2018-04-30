@@ -8,7 +8,7 @@ consts = 'TF'
 def vars_list(expr):
   return ''.join(sorted(set([c for c in expr if c in all_vars])))
 
-#  'zjada' białe znaki występujące w wyrażeniu
+# zwraca string z wyrażeniem bez białych znaków
 def eat_whitespaces(expr):
   expr = ''.join(expr.split())
   return expr
@@ -28,7 +28,7 @@ def correct(expr):
       elif c in (')' + ops):
         return False
     else:
-      if c in ops:
+      if c in ops :
         state = True
       elif c in (all_vars + '('):
         return False
@@ -46,14 +46,14 @@ def correct(expr):
 
   return not state
 
-#  'zjada' zewnętrzne, niepotrzebne nawiasy
+# zwraca string z wyrażeniem, bez zewnętrznych, niepotrzebnych nawiasów
 def eat_parens(expr):
   while (len(expr) > 2 and expr[0] == '(') and (expr[-1] == ')') and correct(expr[1:-1]):
     expr = expr[1:-1]
 
   return expr
 
-#  'dzieli' wyrażenie, zwraca indeks, pod którym występuje operator dzielący (divider) lub -1 w przypadku braku możliwości podzielenia
+# 'dzieli' wyrażenie, zwraca indeks, pod którym występuje operator dzielący (divider) lub -1 w przypadku braku możliwości podzielenia
 def partition(expr, divider):
   parens = 0
 
@@ -64,7 +64,7 @@ def partition(expr, divider):
   
   return -1
 
-#  zamienia wyrażenie na to samo wyrażenie zapisane w odwrotnej notacji polskiej
+# zamienia wyrażenie na to samo wyrażenie zapisane w odwrotnej notacji polskiej
 def rpn(expr):
   expr = eat_parens(expr)  
   
@@ -119,7 +119,7 @@ def generate_bin(n):
   for i in range(2**n):
     yield bin(i)[2:].rjust(n, '0')
 
-# dla dwóch wartości binarnych, jeśli różnią się cyfrą tylko na jednej pozycji, zwraca 
+# 'łączy' dwie liczby binarne różniące się cyfrą tylko na jednej pozycji, wstawiając w to miejsce '-'
 def merge(s1, s2):
   result = ''
   counter = 0
@@ -136,7 +136,7 @@ def merge(s1, s2):
   else:
     return False
 
-# 
+# zwraca zbior implikantów połączeń
 def reduced(vector):
   result = set()
   b2 = False
@@ -177,6 +177,7 @@ def make_tree(expr):
 
       return tree
 
+
 # zwraca drzewo wyrażeń jako string
 def show(expr_values):
   # przypadek gdy element to zmienna
@@ -189,6 +190,7 @@ def show(expr_values):
   return show(expr_values[1]) + expr_values[0] + show(expr_values[2])
 
 
+# dla wyrażenia o wartościach zapisanych w s, zwraca to wyrażenie jako suma koniunkcji
 def show_normalized(s, vars):
   m_res = ''
   for w in s:
@@ -204,8 +206,16 @@ def show_normalized(s, vars):
   return m_res[:-1]
 
 
+# sprawdza czy da się uprościć wyrażenie zapisane w drzewie (wyszukiwanie xor'ów, implikacji i dysjunkcji)
 def check_simplifies(tree):
   if len(tree) == 1: return tree
+
+  if (len(tree) == 3):
+    if (len(tree[1]) == 3):
+      tree[1] = check_simplifies(tree[1])
+
+    if (len(tree[2]) == 3):
+      tree[2] = check_simplifies(tree[2])
 
   if tree[0] == '|':
       # xor
@@ -223,24 +233,23 @@ def check_simplifies(tree):
             q = tree[2][2]
             tree[1] = p
             tree[2] = q
-
       # implikacja
       if (len(tree[1]) == 1 and len(tree[2]) == 2):
           tree[0] = '>'
-          right = tree[1]
-          tree[1] = tree[2][1]
-          tree[2] = right
+          q = tree[1]
+          p = tree[2][1]
+          tree[1] = p
+          tree[2] = q
       if (len(tree[1]) == 2 and len(tree[2]) == 1):
           tree[0] = '>'
           tree[1] = tree[1][1]
-          
-
-  if (len(tree) == 3):
-    if (len(tree[1]) == 3):
-      tree[1] = check_simplifies(tree[1])
-
-    if (len(tree[2]) == 3):
-      tree[2] = check_simplifies(tree[2])
+      # dysjunkcja (gdy wejsciowe drzewo to alternatywa negacji)
+      if (len(tree[1]) == 2 and len(tree[2]) == 2):
+        tree[0] = '/'
+        p = tree[2][1]
+        q = tree[1][1]
+        tree[1] = p
+        tree[2] = q
 
   return tree
 
@@ -271,22 +280,20 @@ def main():
         
     # jeśli żaden wektor wartości nie zwraca prawdy
     if (len(expr_values) == 0):
-      print('F')
-      continue
+      reulst = 'F'
     #jeśli wszystkie zwracają prawdę
     elif (len(expr_values) == 2**len(expr_values[0])):
-      print('T')
-      continue
+      result = 'T'
     else:
       result = show_normalized(reduced(expr_values), expr_vars)
+      result = make_tree(result)
+      result = check_simplifies(result)
+      result = show(result)
 
-    tree = make_tree(result)
-    tree = check_simplifies(tree)
-
-    result_len = len(show(tree))
+    result_len = len(result)
 
     if result_len < original_len:
-      print('{0}, compression: {1:.2f}%'.format(show(tree), result_len / original_len))
+      print('{0}, reduction: {1:.2f}%'.format(result, result_len / original_len * 100))
     else:
       print(original_expr)
 
